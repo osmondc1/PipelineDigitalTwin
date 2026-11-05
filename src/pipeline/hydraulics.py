@@ -12,7 +12,14 @@ Assumptions:
 
 import math
 
-from pipeline.validation import require_non_negative, require_positive
+from pipeline.validation import (
+    require_finite,
+    require_non_negative,
+    require_positive,
+)
+
+# Standard acceleration due to gravity [m/s^2].
+GRAVITY = 9.80665
 
 # Flow regime limits [dimensionless Reynolds number]. These are conventional
 # engineering values, not sharp physical boundaries.
@@ -147,3 +154,88 @@ def friction_factor(reynolds: float, relative_roughness: float) -> float:
         TURBULENT_REYNOLDS_LIMIT - LAMINAR_REYNOLDS_LIMIT
     )
     return laminar_f + fraction * (turbulent_f - laminar_f)
+
+
+def friction_pressure_loss(
+    density: float,
+    velocity: float,
+    length: float,
+    internal_diameter: float,
+    dynamic_viscosity: float,
+    roughness: float,
+) -> float:
+    """Return the pressure lost to wall friction, using Darcy-Weisbach.
+
+    Equation: delta_p = f * (L / D) * (rho * v^2 / 2)
+
+    Fittings, bends and valves are not included.
+
+    Args:
+        density: Fluid density, rho [kg/m^3].
+        velocity: Average fluid velocity, v [m/s]. Zero gives zero loss.
+        length: Pipe length, L [m].
+        internal_diameter: Inside diameter, D [m].
+        dynamic_viscosity: Fluid dynamic viscosity, mu [Pa·s].
+        roughness: Absolute wall roughness, epsilon [m].
+
+    Returns:
+        Friction pressure loss, delta_p [Pa]. Always zero or positive.
+    """
+    require_positive("length", length, "m")
+    require_non_negative("roughness", roughness, "m")
+
+    reynolds = reynolds_number(density, velocity, internal_diameter, dynamic_viscosity)
+    if reynolds == 0:
+        return 0.0  # No flow means no friction, and f is undefined at Re = 0.
+
+    darcy_f = friction_factor(reynolds, roughness / internal_diameter)
+    dynamic_pressure = density * velocity**2 / 2
+    return darcy_f * (length / internal_diameter) * dynamic_pressure
+
+
+def elevation_pressure_change(density: float, elevation_change: float) -> float:
+    """Return the pressure needed to lift the fluid through a height change.
+
+    Equation: delta_p = rho * g * delta_z
+
+    Args:
+        density: Fluid density, rho [kg/m^3].
+        elevation_change: Outlet minus inlet elevation, delta_z [m].
+
+    Returns:
+        Pressure change, delta_p [Pa]. Positive uphill (pressure is lost) and
+        negative downhill (pressure is gained).
+    """
+    require_positive("density", density, "kg/m^3")
+    require_finite("elevation_change", elevation_change, "m")
+    return density * GRAVITY * elevation_change
+
+
+def segment_outlet_pressure(
+    inlet_pressure: float,
+    friction_loss: float,
+    elevation_change_pressure: float,
+    pump_boost: float = 0.0,
+) -> float:
+    """Return the pressure at the outlet of a segment.
+
+    Equation: p_out = p_in + pump_boost - friction_loss - elevation_change_pressure
+
+    This is the only place the sign convention is applied. The result may be
+    low or negative, which means the operating point is not physically
+    achievable. Checking for that is the job of the pipeline model.
+
+    Args:
+        inlet_pressure: Pressure just upstream of any pump, p_in [Pa].
+        friction_loss: Friction pressure loss in the segment [Pa].
+        elevation_change_pressure: Result of elevation_pressure_change [Pa].
+        pump_boost: Pressure added at the segment inlet [Pa]. Defaults to zero.
+
+    Returns:
+        Outlet pressure, p_out [Pa].
+    """
+    require_finite("inlet_pressure", inlet_pressure, "Pa")
+    require_non_negative("friction_loss", friction_loss, "Pa")
+    require_finite("elevation_change_pressure", elevation_change_pressure, "Pa")
+    require_non_negative("pump_boost", pump_boost, "Pa")
+    return inlet_pressure + pump_boost - friction_loss - elevation_change_pressure

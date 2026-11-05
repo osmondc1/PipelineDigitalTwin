@@ -5,10 +5,13 @@ import math
 import pytest
 
 from pipeline.hydraulics import (
+    elevation_pressure_change,
     fluid_velocity,
     friction_factor,
+    friction_pressure_loss,
     pipe_area,
     reynolds_number,
+    segment_outlet_pressure,
 )
 
 
@@ -272,3 +275,198 @@ def test_roughness_in_wrong_units_is_caught() -> None:
     # 0.045 mm entered as 0.045 m, in a 0.5 m pipe, gives 0.045 / 0.5 = 0.09.
     with pytest.raises(ValueError, match="metres"):
         friction_factor(1e5, 0.045 / 0.5)
+
+
+# --- friction_pressure_loss ---
+
+
+def worked_example_loss(**changes: float) -> float:
+    """Friction loss for the worked example, replacing any values a test changes."""
+    values = {
+        "density": 850.0,  # kg/m^3
+        "velocity": 1.27324,  # m/s, from Q = 0.25 m^3/s
+        "length": 100_000.0,  # m
+        "internal_diameter": 0.5,  # m
+        "dynamic_viscosity": 0.01,  # Pa·s
+        "roughness": 45e-6,  # m
+    }
+    values.update(changes)
+    return friction_pressure_loss(**values)
+
+
+def test_friction_loss_matches_hand_calculation() -> None:
+    # Hand check: f = 0.02078, L / D = 200,000,
+    # rho * v^2 / 2 = 850 * 1.27324^2 / 2 = 689.0 Pa
+    # delta_p = 0.02078 * 200,000 * 689.0 = 2.863e6 Pa, about 28.6 bar
+    assert worked_example_loss() == pytest.approx(2.863e6, rel=0.002)
+
+
+def test_friction_loss_agrees_with_colebrook_within_1_percent() -> None:
+    f = colebrook_friction_factor(54_113.0, 9e-5)
+    expected = f * (100_000.0 / 0.5) * (850.0 * 1.27324**2 / 2)
+
+    assert worked_example_loss() == pytest.approx(expected, rel=0.01)
+
+
+def test_laminar_loss_matches_hagen_poiseuille() -> None:
+    # Hagen-Poiseuille is an exact solution for laminar pipe flow:
+    # delta_p = 128 * mu * L * Q / (pi * D^4)
+    density, viscosity, length, diameter, flow = 900.0, 1.0, 1000.0, 0.5, 0.1
+    expected = 128 * viscosity * length * flow / (math.pi * diameter**4)
+    velocity = fluid_velocity(flow, pipe_area(diameter))
+
+    result = friction_pressure_loss(
+        density, velocity, length, diameter, viscosity, 45e-6
+    )
+
+    assert result == pytest.approx(expected)
+
+
+def test_doubling_length_doubles_friction_loss() -> None:
+    doubled = worked_example_loss(length=200_000.0)
+
+    assert doubled == pytest.approx(2 * worked_example_loss())
+
+
+def test_doubling_velocity_stays_between_smooth_and_rough_limits() -> None:
+    # Smooth-pipe turbulent flow (Blasius): loss scales with v^1.75, giving
+    # 2^1.75 = 3.36. Fully rough flow: loss scales with v^2, giving 4.
+    # Our pipe is in between, so its ratio must lie between those limits.
+    ratio = worked_example_loss(velocity=2 * 1.27324) / worked_example_loss()
+
+    assert 2**1.75 < ratio < 4.0
+
+
+def test_zero_velocity_gives_zero_friction_loss() -> None:
+    assert worked_example_loss(velocity=0.0) == 0.0
+
+
+def test_smooth_pipe_loses_less_than_rough_pipe() -> None:
+    assert worked_example_loss(roughness=0.0) < worked_example_loss(roughness=45e-6)
+
+
+@pytest.mark.parametrize(
+    "bad_input",
+    [
+        {"length": 0.0},
+        {"length": -100.0},
+        {"length": math.nan},
+        {"velocity": -1.0},
+        {"density": 0.0},
+        {"internal_diameter": 0.0},
+        {"dynamic_viscosity": 0.0},
+        {"roughness": -1e-6},
+        {"roughness": math.nan},
+    ],
+)
+def test_friction_loss_rejects_impossible_inputs(bad_input: dict[str, float]) -> None:
+    field = next(iter(bad_input))
+
+    with pytest.raises(ValueError, match=field):
+        worked_example_loss(**bad_input)
+
+
+def test_friction_loss_catches_roughness_in_wrong_units() -> None:
+    with pytest.raises(ValueError, match="metres"):
+        worked_example_loss(roughness=0.045)
+
+
+# --- elevation_pressure_change ---
+
+
+def test_elevation_change_matches_hand_calculation() -> None:
+    # Hand check: 850 * 9.80665 * 30 = 250,070 Pa, about 2.5 bar
+    assert elevation_pressure_change(850.0, 30.0) == pytest.approx(250_070.0, rel=1e-4)
+
+
+def test_ten_metres_of_water_is_about_one_bar() -> None:
+    # A well-known rule of thumb.
+    assert elevation_pressure_change(1000.0, 10.0) == pytest.approx(1e5, rel=0.02)
+
+
+def test_downhill_gives_negative_pressure_change() -> None:
+    assert elevation_pressure_change(850.0, -30.0) == pytest.approx(-250_070.0, rel=1e-4)
+
+
+def test_level_pipe_gives_zero_pressure_change() -> None:
+    assert elevation_pressure_change(850.0, 0.0) == 0.0
+
+
+@pytest.mark.parametrize("bad_density", [0.0, -850.0, math.nan, math.inf])
+def test_elevation_change_rejects_impossible_density(bad_density: float) -> None:
+    with pytest.raises(ValueError, match="density"):
+        elevation_pressure_change(bad_density, 30.0)
+
+
+@pytest.mark.parametrize("bad_change", [math.nan, math.inf, -math.inf])
+def test_elevation_change_rejects_non_finite_height(bad_change: float) -> None:
+    with pytest.raises(ValueError, match="elevation_change"):
+        elevation_pressure_change(850.0, bad_change)
+
+
+# --- segment_outlet_pressure ---
+
+
+def test_outlet_pressure_matches_hand_calculation() -> None:
+    # Hand check, in bar: 50 + 30 - 5 - 2.5 = 72.5
+    result = segment_outlet_pressure(50e5, 5e5, 2.5e5, pump_boost=30e5)
+
+    assert result == pytest.approx(72.5e5)
+
+
+def test_pump_boost_defaults_to_zero() -> None:
+    # Hand check, in bar: 50 - 5 - 2.5 = 42.5
+    assert segment_outlet_pressure(50e5, 5e5, 2.5e5) == pytest.approx(42.5e5)
+
+
+def test_friction_reduces_outlet_pressure() -> None:
+    assert segment_outlet_pressure(50e5, 5e5, 0.0) < 50e5
+
+
+def test_uphill_reduces_and_downhill_raises_outlet_pressure() -> None:
+    uphill = elevation_pressure_change(850.0, 30.0)
+    downhill = elevation_pressure_change(850.0, -30.0)
+
+    assert segment_outlet_pressure(50e5, 0.0, uphill) < 50e5
+    assert segment_outlet_pressure(50e5, 0.0, downhill) > 50e5
+
+
+def test_stationary_fluid_only_changes_pressure_with_height() -> None:
+    # With no flow there is no friction, so only the hydrostatic term remains.
+    friction = worked_example_loss(velocity=0.0)
+    elevation = elevation_pressure_change(850.0, 30.0)
+
+    result = segment_outlet_pressure(50e5, friction, elevation)
+
+    assert result == pytest.approx(50e5 - 250_070.0, rel=1e-6)
+
+
+def test_outlet_pressure_may_be_negative() -> None:
+    # Flagging this is the pipeline model's job, so it must not raise here.
+    assert segment_outlet_pressure(1e5, 5e5, 0.0) < 0
+
+
+@pytest.mark.parametrize(
+    "bad_input",
+    [
+        {"inlet_pressure": math.nan},
+        {"inlet_pressure": math.inf},
+        {"friction_loss": -1.0},
+        {"friction_loss": math.nan},
+        {"elevation_change_pressure": math.nan},
+        {"pump_boost": -1.0},
+        {"pump_boost": math.nan},
+    ],
+)
+def test_outlet_pressure_rejects_impossible_inputs(bad_input: dict[str, float]) -> None:
+    values = {
+        "inlet_pressure": 50e5,
+        "friction_loss": 5e5,
+        "elevation_change_pressure": 2.5e5,
+        "pump_boost": 0.0,
+    }
+    values.update(bad_input)
+    field = next(iter(bad_input))
+
+    with pytest.raises(ValueError, match=field):
+        segment_outlet_pressure(**values)
