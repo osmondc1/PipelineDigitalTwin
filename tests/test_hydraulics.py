@@ -6,6 +6,7 @@ import pytest
 
 from pipeline.hydraulics import (
     elevation_pressure_change,
+    flow_regime,
     fluid_velocity,
     friction_factor,
     friction_pressure_loss,
@@ -470,3 +471,30 @@ def test_outlet_pressure_rejects_impossible_inputs(bad_input: dict[str, float]) 
 
     with pytest.raises(ValueError, match=field):
         segment_outlet_pressure(**values)
+
+
+# --- flow_regime ---
+
+
+@pytest.mark.parametrize(
+    "reynolds, expected",
+    [
+        (0.0, "no flow"),
+        (1000.0, "laminar"),
+        (2300.0, "laminar"),
+        (2300.1, "transitional"),
+        (3999.9, "transitional"),
+        (4000.0, "turbulent"),
+        (54_113.0, "turbulent"),
+    ],
+)
+def test_flow_regime_classifies_reynolds_number(
+    reynolds: float, expected: str
+) -> None:
+    assert flow_regime(reynolds) == expected
+
+
+@pytest.mark.parametrize("bad_reynolds", [-1.0, math.nan, math.inf])
+def test_flow_regime_rejects_impossible_reynolds_number(bad_reynolds: float) -> None:
+    with pytest.raises(ValueError, match="reynolds"):
+        flow_regime(bad_reynolds)

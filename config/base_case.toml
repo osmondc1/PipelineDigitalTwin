@@ -1,0 +1,64 @@
+# Base case for the steady-state pipeline model.
+#
+# All values are ILLUSTRATIVE. They are plausible for a crude oil line but do
+# not describe a real pipeline.
+#
+# Units are in each setting's name. All pressures are absolute unless the name
+# says otherwise. To add 1 bar of pressure, add 100000 Pa.
+
+name = "Illustrative 100 km crude oil pipeline"
+flow_rate_m3_per_s = 0.25
+inlet_pressure_pa_abs = 300000.0
+
+[fluid]
+density_kg_per_m3 = 850.0
+dynamic_viscosity_pa_s = 0.01
+vapor_pressure_pa_abs = 30000.0
+
+# Segments run from upstream to downstream. Each one must start at the
+# elevation where the previous one ended. Put a segment boundary at any high
+# point, because the model only sees the elevation at each segment's ends.
+
+[[segments]]
+name = "S1"
+length_m = 30000.0
+internal_diameter_m = 0.5
+roughness_m = 45e-6
+inlet_elevation_m = 50.0
+outlet_elevation_m = 180.0
+
+[[segments]]
+name = "S2"
+length_m = 25000.0
+internal_diameter_m = 0.5
+roughness_m = 45e-6
+inlet_elevation_m = 180.0
+outlet_elevation_m = 120.0
+
+[[segments]]
+name = "S3"
+length_m = 25000.0
+internal_diameter_m = 0.5
+roughness_m = 45e-6
+inlet_elevation_m = 120.0
+outlet_elevation_m = 200.0
+
+[[segments]]
+name = "S4"
+length_m = 20000.0
+internal_diameter_m = 0.5
+roughness_m = 45e-6
+inlet_elevation_m = 200.0
+outlet_elevation_m = 80.0
+
+# Each pump station sits at the inlet of the named segment.
+
+[[pumps]]
+name = "PS1"
+segment_name = "S1"
+pressure_boost_pa = 3500000.0
+
+[[pumps]]
+name = "PS2"
+segment_name = "S3"
+pressure_boost_pa = 1500000.0

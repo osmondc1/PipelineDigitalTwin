@@ -89,6 +89,27 @@ def reynolds_number(
     return density * velocity * internal_diameter / dynamic_viscosity
 
 
+def flow_regime(reynolds: float) -> str:
+    """Return the flow type for a Reynolds number.
+
+    The limits match those used by friction_factor.
+
+    Args:
+        reynolds: Reynolds number, Re [dimensionless]. Zero means no flow.
+
+    Returns:
+        One of "no flow", "laminar", "transitional" or "turbulent".
+    """
+    require_non_negative("reynolds", reynolds, "(dimensionless)")
+    if reynolds == 0:
+        return "no flow"
+    if reynolds <= LAMINAR_REYNOLDS_LIMIT:
+        return "laminar"
+    if reynolds < TURBULENT_REYNOLDS_LIMIT:
+        return "transitional"
+    return "turbulent"
+
+
 def _laminar_friction_factor(reynolds: float) -> float:
     """Return the laminar Darcy friction factor, f = 64 / Re."""
     return 64.0 / reynolds
