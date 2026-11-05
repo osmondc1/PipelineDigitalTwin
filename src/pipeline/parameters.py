@@ -11,32 +11,14 @@ Assumptions:
     - A pump station gives a fixed pressure boost, independent of flow rate.
 """
 
-import math
 from dataclasses import dataclass
 
-
-def _require_positive(field_name: str, value: float, unit: str) -> None:
-    """Raise ValueError unless value is a finite number greater than zero."""
-    if not math.isfinite(value) or value <= 0:
-        raise ValueError(f"{field_name} must be > 0 {unit}, got {value}")
-
-
-def _require_non_negative(field_name: str, value: float, unit: str) -> None:
-    """Raise ValueError unless value is a finite number of zero or more."""
-    if not math.isfinite(value) or value < 0:
-        raise ValueError(f"{field_name} must be >= 0 {unit}, got {value}")
-
-
-def _require_finite(field_name: str, value: float, unit: str) -> None:
-    """Raise ValueError unless value is a finite number (it may be negative)."""
-    if not math.isfinite(value):
-        raise ValueError(f"{field_name} must be a finite number of {unit}, got {value}")
-
-
-def _require_name(field_name: str, value: str) -> None:
-    """Raise ValueError if a name is empty or only spaces."""
-    if not value.strip():
-        raise ValueError(f"{field_name} must not be blank")
+from pipeline.validation import (
+    require_finite,
+    require_name,
+    require_non_negative,
+    require_positive,
+)
 
 
 @dataclass(frozen=True)
@@ -62,12 +44,12 @@ class PipeSegment:
 
     def __post_init__(self) -> None:
         """Reject impossible segments as soon as one is created."""
-        _require_name("name", self.name)
-        _require_positive("length", self.length, "m")
-        _require_positive("internal_diameter", self.internal_diameter, "m")
-        _require_non_negative("roughness", self.roughness, "m")
-        _require_finite("inlet_elevation", self.inlet_elevation, "m")
-        _require_finite("outlet_elevation", self.outlet_elevation, "m")
+        require_name("name", self.name)
+        require_positive("length", self.length, "m")
+        require_positive("internal_diameter", self.internal_diameter, "m")
+        require_non_negative("roughness", self.roughness, "m")
+        require_finite("inlet_elevation", self.inlet_elevation, "m")
+        require_finite("outlet_elevation", self.outlet_elevation, "m")
 
         if self.roughness >= self.internal_diameter:
             raise ValueError(
@@ -106,6 +88,6 @@ class PumpStation:
 
     def __post_init__(self) -> None:
         """Reject impossible pump stations as soon as one is created."""
-        _require_name("name", self.name)
-        _require_name("segment_name", self.segment_name)
-        _require_non_negative("pressure_boost", self.pressure_boost, "Pa")
+        require_name("name", self.name)
+        require_name("segment_name", self.segment_name)
+        require_non_negative("pressure_boost", self.pressure_boost, "Pa")
