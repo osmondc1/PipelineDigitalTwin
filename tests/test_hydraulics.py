@@ -4,7 +4,12 @@ import math
 
 import pytest
 
-from pipeline.hydraulics import fluid_velocity, pipe_area, reynolds_number
+from pipeline.hydraulics import (
+    fluid_velocity,
+    friction_factor,
+    pipe_area,
+    reynolds_number,
+)
 
 
 # --- pipe_area ---
@@ -117,3 +122,153 @@ def test_worked_example_from_flow_rate_to_reynolds_number() -> None:
     assert area == pytest.approx(0.19635, rel=1e-4)
     assert velocity == pytest.approx(1.2732, rel=1e-4)
     assert reynolds == pytest.approx(54_113.0, rel=1e-4)
+
+
+# --- friction_factor: helper for independent checking ---
+
+
+def colebrook_friction_factor(reynolds: float, relative_roughness: float) -> float:
+    """Solve the Colebrook equation by repeated substitution.
+
+    1 / sqrt(f) = -2 * log10(rr / 3.7 + 2.51 / (Re * sqrt(f)))
+
+    This is deliberately separate from the model code, so that it acts as an
+    independent reference. f appears on both sides, so we guess f, calculate
+    the right-hand side, and repeat until the answer stops changing.
+    """
+    f = 0.02
+    for _ in range(100):
+        right_side = -2 * math.log10(
+            relative_roughness / 3.7 + 2.51 / (reynolds * math.sqrt(f))
+        )
+        f = 1 / right_side**2
+    return f
+
+
+# --- friction_factor: laminar flow ---
+
+
+def test_laminar_friction_matches_hand_calculation() -> None:
+    # Hand check: f = 64 / 1000 = 0.064
+    assert friction_factor(1000.0, 0.0001) == pytest.approx(0.064)
+
+
+def test_laminar_friction_ignores_roughness() -> None:
+    assert friction_factor(1000.0, 0.0) == friction_factor(1000.0, 0.05)
+
+
+def test_laminar_formula_applies_at_regime_limit() -> None:
+    # Hand check: f = 64 / 2300 = 0.027826
+    assert friction_factor(2300.0, 0.0001) == pytest.approx(0.027826, rel=1e-4)
+
+
+# --- friction_factor: turbulent flow ---
+
+
+def test_turbulent_friction_matches_worked_example() -> None:
+    # Hand check with Re = 54,113 and rr = 45e-6 / 0.5 = 9e-5:
+    # f = 0.25 / [log10(2.432e-5 + 3.154e-4)]^2 = 0.0208
+    assert friction_factor(54_113.0, 9e-5) == pytest.approx(0.0208, rel=0.005)
+
+
+@pytest.mark.parametrize(
+    "reynolds, relative_roughness, published_f",
+    [
+        (1e5, 0.0, 0.0180),  # Smooth pipe
+        (1e5, 0.001, 0.0222),  # Moderately rough pipe
+        (1e8, 0.01, 0.0380),  # Fully rough pipe
+    ],
+)
+def test_turbulent_friction_matches_moody_chart(
+    reynolds: float, relative_roughness: float, published_f: float
+) -> None:
+    result = friction_factor(reynolds, relative_roughness)
+
+    assert result == pytest.approx(published_f, rel=0.015)
+
+
+@pytest.mark.parametrize("reynolds", [1e4, 1e5, 1e6, 1e7])
+@pytest.mark.parametrize("relative_roughness", [1e-6, 1e-5, 1e-4, 1e-3])
+def test_swamee_jain_within_1_percent_for_realistic_pipelines(
+    reynolds: float, relative_roughness: float
+) -> None:
+    # The conditions a steel transmission pipeline normally operates in.
+    expected = colebrook_friction_factor(reynolds, relative_roughness)
+
+    result = friction_factor(reynolds, relative_roughness)
+
+    assert result == pytest.approx(expected, rel=0.01)
+
+
+@pytest.mark.parametrize("reynolds", [5e3, 1e4, 1e5, 1e6, 1e7, 1e8])
+@pytest.mark.parametrize("relative_roughness", [1e-6, 1e-5, 1e-4, 1e-3, 1e-2])
+def test_swamee_jain_within_3_percent_across_rated_range(
+    reynolds: float, relative_roughness: float
+) -> None:
+    # Measured worst case is 2.8%, at Re = 5000 and relative roughness = 0.01.
+    expected = colebrook_friction_factor(reynolds, relative_roughness)
+
+    result = friction_factor(reynolds, relative_roughness)
+
+    assert result == pytest.approx(expected, rel=0.03)
+
+
+def test_friction_falls_as_reynolds_number_rises() -> None:
+    assert friction_factor(1e6, 0.0001) < friction_factor(1e5, 0.0001)
+
+
+def test_friction_rises_with_roughness() -> None:
+    assert friction_factor(1e5, 0.001) > friction_factor(1e5, 0.0001)
+
+
+# --- friction_factor: transitional flow ---
+
+
+def test_transitional_midpoint_is_average_of_regime_limits() -> None:
+    # Re = 3150 is exactly halfway between 2300 and 4000.
+    laminar_limit_f = friction_factor(2300.0, 0.0001)
+    turbulent_limit_f = friction_factor(4000.0, 0.0001)
+
+    result = friction_factor(3150.0, 0.0001)
+
+    assert result == pytest.approx((laminar_limit_f + turbulent_limit_f) / 2)
+
+
+@pytest.mark.parametrize("limit", [2300.0, 4000.0])
+def test_friction_has_no_jump_at_regime_limits(limit: float) -> None:
+    just_below = friction_factor(limit - 1e-6, 0.0001)
+    just_above = friction_factor(limit + 1e-6, 0.0001)
+
+    assert just_below == pytest.approx(just_above, rel=1e-6)
+
+
+# --- friction_factor: boundary conditions ---
+
+
+def test_maximum_relative_roughness_is_allowed() -> None:
+    assert friction_factor(1e5, 0.05) > 0
+
+
+def test_smooth_pipe_is_allowed_in_turbulent_flow() -> None:
+    assert friction_factor(1e5, 0.0) > 0
+
+
+# --- friction_factor: invalid inputs ---
+
+
+@pytest.mark.parametrize("bad_reynolds", [0.0, -1000.0, math.nan, math.inf])
+def test_friction_rejects_impossible_reynolds_number(bad_reynolds: float) -> None:
+    with pytest.raises(ValueError, match="reynolds"):
+        friction_factor(bad_reynolds, 0.0001)
+
+
+@pytest.mark.parametrize("bad_roughness", [-0.0001, 0.0501, math.nan, math.inf])
+def test_friction_rejects_impossible_relative_roughness(bad_roughness: float) -> None:
+    with pytest.raises(ValueError, match="relative_roughness"):
+        friction_factor(1e5, bad_roughness)
+
+
+def test_roughness_in_wrong_units_is_caught() -> None:
+    # 0.045 mm entered as 0.045 m, in a 0.5 m pipe, gives 0.045 / 0.5 = 0.09.
+    with pytest.raises(ValueError, match="metres"):
+        friction_factor(1e5, 0.045 / 0.5)
