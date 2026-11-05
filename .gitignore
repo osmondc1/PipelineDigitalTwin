@@ -1,0 +1,24 @@
+# Virtual environment (recreate it with: python -m venv .venv)
+.venv/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Test and tool caches
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Generated data: keep the folders out of Git, reproduce the data from code
+data/raw/*
+data/processed/*
+data/simulated/*
+*.sqlite
+*.db
+
+# Secrets and local settings
+.env
+.vscode/
