@@ -9,7 +9,8 @@ Assumptions:
     - Steady flow: the same flow rate passes through every segment.
     - Flow rate and inlet pressure are inputs. The model does not solve for
       them from pump curves or delivery conditions.
-    - Fluid properties are constant along the line.
+    - Density is constant along the line. Viscosity is too, unless a value is
+      supplied for each segment (see thermal.py).
     - Each pump adds a fixed pressure at the inlet of its segment.
     - Pressure varies linearly along a segment, so the lowest pressure in a
       segment is always at one of its ends.
@@ -36,7 +37,7 @@ from pipeline.hydraulics import (
     segment_outlet_pressure,
 )
 from pipeline.parameters import PipeSegment, PumpStation
-from pipeline.validation import require_non_negative
+from pipeline.validation import require_non_negative, require_positive
 
 # Largest elevation mismatch allowed where two segments join [m].
 ELEVATION_TOLERANCE = 1e-6
@@ -150,6 +151,7 @@ def _validate_layout(
 def _calculate_segment(
     segment: PipeSegment,
     fluid: Fluid,
+    dynamic_viscosity: float,
     flow_rate: float,
     inlet_pressure: float,
     pump_boost: float,
@@ -157,7 +159,7 @@ def _calculate_segment(
     """Return the calculated conditions for one segment."""
     velocity = fluid_velocity(flow_rate, pipe_area(segment.internal_diameter))
     reynolds = reynolds_number(
-        fluid.density, velocity, segment.internal_diameter, fluid.dynamic_viscosity
+        fluid.density, velocity, segment.internal_diameter, dynamic_viscosity
     )
     darcy_f = None
     if reynolds > 0:
@@ -170,7 +172,7 @@ def _calculate_segment(
         velocity,
         segment.length,
         segment.internal_diameter,
-        fluid.dynamic_viscosity,
+        dynamic_viscosity,
         segment.roughness,
     )
     elevation_pressure = elevation_pressure_change(
@@ -205,6 +207,7 @@ def calculate_pipeline(
     inlet_pressure: float,
     segments: Sequence[PipeSegment],
     pumps: Sequence[PumpStation] = (),
+    segment_viscosities: Sequence[float] | None = None,
 ) -> PipelineResult:
     """Calculate the steady-state pressure through a pipeline.
 
@@ -214,6 +217,9 @@ def calculate_pipeline(
         inlet_pressure: Absolute pressure at the start of the line [Pa].
         segments: Pipe segments ordered from upstream to downstream.
         pumps: Pump stations, each at the inlet of a named segment.
+        segment_viscosities: Optional dynamic viscosity for each segment, in the
+            same order as segments [Pa·s]. If left out, every segment uses
+            fluid.dynamic_viscosity.
 
     Returns:
         The calculated conditions for every segment.
@@ -225,14 +231,26 @@ def calculate_pipeline(
     require_non_negative("inlet_pressure", inlet_pressure, "Pa")
     _validate_layout(segments, pumps)
 
+    if segment_viscosities is None:
+        segment_viscosities = [fluid.dynamic_viscosity] * len(segments)
+    if len(segment_viscosities) != len(segments):
+        raise ValueError(
+            f"segment_viscosities needs one value per segment: got "
+            f"{len(segment_viscosities)} for {len(segments)} segments"
+        )
+    for viscosity in segment_viscosities:
+        require_positive("segment_viscosities", viscosity, "Pa·s")
+
     # A dictionary lets us look up each segment's pump boost by name.
     pump_boosts = {pump.segment_name: pump.pressure_boost for pump in pumps}
 
     results = []
     pressure = inlet_pressure
-    for segment in segments:
+    for segment, viscosity in zip(segments, segment_viscosities):
         boost = pump_boosts.get(segment.name, 0.0)
-        result = _calculate_segment(segment, fluid, flow_rate, pressure, boost)
+        result = _calculate_segment(
+            segment, fluid, viscosity, flow_rate, pressure, boost
+        )
         results.append(result)
         pressure = result.outlet_pressure  # Becomes the next segment's inlet.
 
