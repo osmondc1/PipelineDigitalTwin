@@ -1,0 +1,95 @@
+# Simulated sensor network.
+#
+# Accuracy values are ILLUSTRATIVE ASSUMPTIONS, not manufacturer data.
+#
+# noise_std: random scatter between readings, as a standard deviation.
+# bias_std: spread of each sensor's fixed calibration error, as a standard
+#     deviation. One bias is drawn per sensor and then stays the same.
+# missing_probability: chance that any one sample is not recorded.
+#
+# noise_std and bias_std use the sensor's unit: barg for pressure, m3/h for
+# flow, and degC for temperature.
+#
+# location_km must be the start or end of the line, or a segment join.
+
+[[sensors]]
+sensor_id = "PT-001"
+quantity = "pressure"
+location = "Inlet, just after PS1"
+location_km = 0.0
+upstream_of_pump = false
+sampling_interval_s = 60.0
+noise_std = 0.03
+bias_std = 0.04
+missing_probability = 0.002
+
+[[sensors]]
+sensor_id = "PT-002"
+quantity = "pressure"
+location = "Intermediate, just before PS2"
+location_km = 55.0
+upstream_of_pump = true
+sampling_interval_s = 60.0
+noise_std = 0.03
+bias_std = 0.04
+missing_probability = 0.002
+
+[[sensors]]
+sensor_id = "PT-003"
+quantity = "pressure"
+location = "Outlet"
+location_km = 100.0
+sampling_interval_s = 60.0
+noise_std = 0.03
+bias_std = 0.04
+missing_probability = 0.002
+
+[[sensors]]
+sensor_id = "FT-001"
+quantity = "flow"
+location = "Inlet"
+location_km = 0.0
+sampling_interval_s = 60.0
+noise_std = 2.0
+bias_std = 3.5
+missing_probability = 0.002
+
+[[sensors]]
+sensor_id = "FT-002"
+quantity = "flow"
+location = "Outlet"
+location_km = 100.0
+sampling_interval_s = 60.0
+noise_std = 2.0
+bias_std = 3.5
+missing_probability = 0.002
+
+[[sensors]]
+sensor_id = "TT-001"
+quantity = "temperature"
+location = "Inlet"
+location_km = 0.0
+sampling_interval_s = 60.0
+noise_std = 0.05
+bias_std = 0.2
+missing_probability = 0.002
+
+[[sensors]]
+sensor_id = "TT-002"
+quantity = "temperature"
+location = "Intermediate"
+location_km = 55.0
+sampling_interval_s = 60.0
+noise_std = 0.05
+bias_std = 0.2
+missing_probability = 0.002
+
+[[sensors]]
+sensor_id = "TT-003"
+quantity = "temperature"
+location = "Outlet"
+location_km = 100.0
+sampling_interval_s = 60.0
+noise_std = 0.05
+bias_std = 0.2
+missing_probability = 0.002
