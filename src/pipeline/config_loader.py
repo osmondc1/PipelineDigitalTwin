@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pipeline.fluid_properties import Fluid
 from pipeline.parameters import PipeSegment, PumpStation
+from pipeline.thermal import ThermalProperties
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,8 @@ class PipelineCase:
         inlet_pressure: Absolute pressure at the start of the line [Pa].
         segments: Pipe segments ordered from upstream to downstream.
         pumps: Pump stations.
+        thermal: Thermal properties, or None if the case does not model
+            temperature.
     """
 
     name: str
@@ -27,6 +30,7 @@ class PipelineCase:
     inlet_pressure: float
     segments: tuple[PipeSegment, ...]
     pumps: tuple[PumpStation, ...]
+    thermal: ThermalProperties | None = None
 
 
 def load_case(path: Path) -> PipelineCase:
@@ -58,6 +62,7 @@ def load_case(path: Path) -> PipelineCase:
             inlet_pressure=data["inlet_pressure_pa_abs"],
             segments=tuple(_build_segment(row) for row in data["segments"]),
             pumps=tuple(_build_pump(row) for row in data.get("pumps", [])),
+            thermal=_build_thermal(data["thermal"]) if "thermal" in data else None,
         )
     except KeyError as error:
         raise ValueError(f"{path} is missing the setting {error}") from error
@@ -69,6 +74,19 @@ def _build_fluid(settings: dict) -> Fluid:
         density=settings["density_kg_per_m3"],
         dynamic_viscosity=settings["dynamic_viscosity_pa_s"],
         vapor_pressure=settings["vapor_pressure_pa_abs"],
+    )
+
+
+def _build_thermal(settings: dict) -> ThermalProperties:
+    """Build ThermalProperties from the [thermal] table."""
+    return ThermalProperties(
+        specific_heat=settings["specific_heat_j_per_kg_k"],
+        heat_transfer_coefficient=settings["heat_transfer_coefficient_w_per_m2_k"],
+        ground_temperature=settings["ground_temperature_k"],
+        reference_temperature=settings["reference_temperature_k"],
+        viscosity_temperature_coefficient=settings[
+            "viscosity_temperature_coefficient_per_k"
+        ],
     )
 
 

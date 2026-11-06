@@ -1,0 +1,62 @@
+# Plan for the simulated operating data. All data it produces is SYNTHETIC, and
+# every value here is an illustrative assumption.
+#
+# The model is steady-state, so each time step is treated as settled. Scripted
+# events must keep flow below about 0.34 m3/s, where low pressure first appears.
+
+seed = 42
+start_time = 2026-01-01T00:00:00Z
+duration_days = 30.0
+time_step_s = 60.0
+
+# How long the slow random wander stays correlated.
+noise_correlation_hours = 2.0
+
+[flow]
+daily_amplitude_fraction = 0.04  # 0.04 means +/- 4% through the day
+peak_hour = 18.0
+noise_std_fraction = 0.01
+
+[pumps]
+noise_std_fraction = 0.005
+
+[inlet_pressure]
+noise_std_pa = 5000.0
+
+[inlet_temperature]
+mean_k = 313.15  # 40 degC
+daily_amplitude_k = 1.5
+peak_hour = 15.0
+
+# Each event moves the flow and/or one pump's boost by a fraction of normal.
+# It ramps up after start_day, holds until end_day, then ramps back down.
+# flow_fraction = 1.15 means 15% more flow. boost_fraction = 0.0 means stopped.
+
+[[events]]
+label = "demand_increase"
+start_day = 6.0
+end_day = 9.0
+ramp_up_hours = 2.0
+ramp_down_hours = 2.0
+flow_fraction = 1.15
+
+[[events]]
+label = "ps1_decline"
+start_day = 12.0
+end_day = 20.0
+ramp_up_hours = 192.0  # Worsens for the whole 8 days, until repaired.
+ramp_down_hours = 0.0
+pump = "PS1"
+boost_fraction = 0.92
+
+# A scripted trip: this model cannot work out the new flow by itself, so the
+# reduced flow is stated here.
+[[events]]
+label = "ps2_trip"
+start_day = 24.0
+end_day = 24.25
+ramp_up_hours = 0.1
+ramp_down_hours = 0.5
+pump = "PS2"
+boost_fraction = 0.0
+flow_fraction = 0.75

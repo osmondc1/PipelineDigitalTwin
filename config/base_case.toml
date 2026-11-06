@@ -62,3 +62,14 @@ pressure_boost_pa = 3500000.0
 name = "PS2"
 segment_name = "S3"
 pressure_boost_pa = 1500000.0
+
+# Thermal inputs are ILLUSTRATIVE ASSUMPTIONS, not measured crude oil data.
+# Temperatures are in kelvin: add 273.15 to a value in degrees Celsius.
+# The fluid's dynamic viscosity applies at the reference temperature.
+
+[thermal]
+specific_heat_j_per_kg_k = 2000.0
+heat_transfer_coefficient_w_per_m2_k = 2.0
+ground_temperature_k = 288.15
+reference_temperature_k = 303.15
+viscosity_temperature_coefficient_per_k = 0.03
