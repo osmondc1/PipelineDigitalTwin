@@ -60,3 +60,50 @@ ramp_down_hours = 0.5
 pump = "PS2"
 boost_fraction = 0.0
 flow_fraction = 0.75
+
+# Scripted sensor faults. The instrument misbehaves, not the pipeline.
+#
+# kind is one of:
+#   stuck       the reading freezes
+#   drift       an error grows steadily to magnitude, until end_day
+#   spike       occasional readings jump by +/- magnitude
+#   bias_shift  a constant error of magnitude appears, until end_day
+#   dropout     no readings are recorded
+#
+# magnitude uses the sensor's unit. Faults on one sensor must not overlap.
+
+[[sensor_faults]]
+sensor_id = "PT-002"
+kind = "stuck"
+start_day = 3.0
+end_day = 3.25
+
+# This looks like flow going missing, so it is a useful test later on: not
+# every flow imbalance is a leak.
+[[sensor_faults]]
+sensor_id = "FT-002"
+kind = "drift"
+start_day = 10.0
+end_day = 14.0
+magnitude = 12.0
+
+[[sensor_faults]]
+sensor_id = "TT-002"
+kind = "spike"
+start_day = 16.0
+end_day = 17.0
+magnitude = 3.0
+spike_probability = 0.02
+
+[[sensor_faults]]
+sensor_id = "PT-003"
+kind = "bias_shift"
+start_day = 21.0
+end_day = 23.0
+magnitude = 0.5
+
+[[sensor_faults]]
+sensor_id = "FT-001"
+kind = "dropout"
+start_day = 26.0
+end_day = 26.5
