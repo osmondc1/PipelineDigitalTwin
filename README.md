@@ -26,7 +26,8 @@ python -m venv .venv
 
 ## Usage
 
-Run the base case:
+Run the base case. This prints a report and saves a pressure profile chart to
+`outputs/pressure_profile.png`:
 
 ```powershell
 .venv\Scripts\python scripts\run_model.py
@@ -46,13 +47,14 @@ Its values are illustrative and do not describe a real pipeline.
 | Path | Purpose |
 |---|---|
 | `config/base_case.toml` | Base-case inputs |
-| `scripts/run_model.py` | Runs the model and prints a report |
+| `scripts/run_model.py` | Runs the model, prints a report and saves a chart |
 | `src/pipeline/fluid_properties.py` | `Fluid` class |
 | `src/pipeline/parameters.py` | `PipeSegment` and `PumpStation` classes |
 | `src/pipeline/hydraulics.py` | Single-segment equations |
 | `src/pipeline/pipeline_model.py` | Multi-segment pressure calculation |
 | `src/pipeline/config_loader.py` | Reads TOML cases |
 | `src/pipeline/report.py` | Formats text reports |
+| `src/pipeline/plotting.py` | Builds and draws the pressure profile |
 | `src/pipeline/validation.py` | Shared input checks |
 | `tests/` | Automated tests |
 

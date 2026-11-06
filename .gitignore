@@ -22,3 +22,6 @@ data/simulated/*
 # Secrets and local settings
 .env
 .vscode/
+
+# Files the code can regenerate
+outputs/
